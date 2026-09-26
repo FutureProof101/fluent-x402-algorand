@@ -29,6 +29,9 @@ const indexer = process.env.INDEXER_URL ?? (isMainnet
   : "https://testnet-idx.4160.nodely.dev");
 const price = process.env.PRICE ?? "$0.01";
 const port = Number(process.env.PORT ?? 4021);
+// Public origin. Railway terminates TLS, so the app sees http:// and would otherwise register the
+// Bazaar resource URL without https. Set PUBLIC_URL to the public origin in production.
+const publicUrl = (process.env.PUBLIC_URL ?? "").replace(/\/$/, "");
 
 function need(k: string): string {
   const v = process.env[k];
@@ -82,6 +85,7 @@ app.get("/health", (c) => c.json({ ok: true, ts: new Date().toISOString() }));
 
 app.use(paymentMiddleware({
   "GET /v1/receipt": {
+    ...(publicUrl ? { resource: `${publicUrl}/v1/receipt` } : {}),
     accepts: [{ scheme: "exact", price, network, payTo, extra: { asset: usdcAsa } }],
     description: "Verified Algorand payment receipt: fetches a confirmed transaction from the indexer, normalises it to the Fluent receipt shape, and returns it with a canonical hash. Built for agents that need proof-of-payment records.",
     mimeType: "application/json",
