@@ -79,6 +79,7 @@ app.get("/", (c) => c.json({
   network: isMainnet ? "algorand-mainnet" : "algorand-testnet",
   paid: { "GET /v1/receipt?txid=<txid>": { price, asset: `USDC ASA ${usdcAsa}`, payTo } },
   free: ["GET /", "GET /health"],
+  publicUrl: publicUrl || null,
   docs: "https://github.com/FutureProof101/fluent-x402-algorand",
 }));
 app.get("/health", (c) => c.json({ ok: true, ts: new Date().toISOString() }));
