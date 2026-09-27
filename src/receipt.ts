@@ -18,7 +18,16 @@ export type Receipt = {
   indexerSource: string;
 };
 
-type Ok = { receipt: Receipt; hash: string };
+// Runtime copy of the Receipt keys, in canonical order. The two checks below fail to compile if
+// this list and the type drift apart in either direction.
+export const RECEIPT_FIELDS = [
+  "version", "network", "txid", "type", "asset", "amount", "from", "to", "closeTo", "rekeyTo",
+  "round", "roundTime", "groupId", "note", "indexerSource",
+] as const satisfies readonly (keyof Receipt)[];
+const _allFields: Exclude<keyof Receipt, (typeof RECEIPT_FIELDS)[number]> extends never ? true : never = true;
+void _allFields;
+
+export type Ok = { receipt: Receipt; hash: string };
 type Err = { error: string; status: 404 | 502 };
 
 export async function buildReceipt(indexer: string, txid: string, mainnet: boolean): Promise<Ok | Err> {

@@ -12,7 +12,10 @@ import {
   USDC_MAINNET_ASA_ID,
   USDC_TESTNET_ASA_ID,
 } from "@x402/avm";
-import { buildReceipt } from "./receipt.js";
+import { paidAccepts, type ServiceConfig } from "./meta.js";
+import { ReceiptStore } from "./store.js";
+import { Funnel, funnel, type AppEnv } from "./funnel.js";
+import { mountFree, mountPaid } from "./routes.js";
 
 config();
 
@@ -72,22 +75,19 @@ const receiptDiscovery = declareDiscoveryExtension({
   },
 });
 
-const app = new Hono();
+const cfg: ServiceConfig = { payTo, network, usdcAsa, price, publicUrl, isMainnet };
+const deps = { cfg, store: new ReceiptStore(), funnel: new Funnel(), indexer, startedAtMs: Date.now() };
 
-app.get("/", (c) => c.json({
-  service: "Fluent x402 receipt endpoint (Algorand)",
-  network: isMainnet ? "algorand-mainnet" : "algorand-testnet",
-  paid: { "GET /v1/receipt?txid=<txid>": { price, asset: `USDC ASA ${usdcAsa}`, payTo } },
-  free: ["GET /", "GET /health"],
-  publicUrl: publicUrl || null,
-  docs: "https://github.com/FutureProof101/fluent-x402-algorand",
-}));
-app.get("/health", (c) => c.json({ ok: true, ts: new Date().toISOString() }));
+const app = new Hono<AppEnv>();
 
+// Free surface (discover, quote, receipt re-read, metadata) goes before the payment middleware.
+mountFree(app, deps);
+
+app.use("/v1/receipt", funnel(deps.funnel));
 app.use(paymentMiddleware({
   "GET /v1/receipt": {
     ...(publicUrl ? { resource: `${publicUrl}/v1/receipt` } : {}),
-    accepts: [{ scheme: "exact", price, network, payTo, extra: { asset: usdcAsa } }],
+    accepts: paidAccepts(cfg),
     description: "Verified Algorand payment receipt: fetches a confirmed transaction from the indexer, normalises it to the Fluent receipt shape, and returns it with a canonical hash. Built for agents that need proof-of-payment records.",
     mimeType: "application/json",
     serviceName: "Fluent",
@@ -96,15 +96,7 @@ app.use(paymentMiddleware({
   },
 }, server));
 
-app.get("/v1/receipt", async (c) => {
-  const txid = c.req.query("txid") ?? "";
-  if (!/^[A-Z2-7]{52}$/.test(txid)) {
-    return c.json({ error: "txid must be a 52-char base32 Algorand transaction id" }, 400);
-  }
-  const r = await buildReceipt(indexer, txid, isMainnet);
-  if ("error" in r) return c.json({ error: r.error }, r.status);
-  return c.json(r);
-});
+mountPaid(app, deps);
 
 serve({ fetch: app.fetch, port }, () => {
   console.log(`fluent-x402 listening on :${port} network=${net} payTo=${payTo} facilitator=${facilitatorUrl}`);
