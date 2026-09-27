@@ -68,6 +68,27 @@ Response:
 }
 ```
 
+## Second endpoint: group proof
+
+`GET /v1/verify-group?groupId=<base64>&round=<n>` ($0.02 USDC, same asset, network and payTo)
+proves that an Algorand atomic group landed at a given round. It reads the group from the indexer
+at exactly that round and returns every member, ordered by txid, with the sha256 of the canonical
+proof; `complete` is `false` if the indexer page was full. The group id must be percent-encoded.
+
+```bash
+GROUP='urRYpkY24txRUle6bI6X0ScMP5EJpuk2QJ+P5w46/E8='
+ROUND=64000000
+
+# quote (free, no network call): validates the input, shows price and proof fields
+curl -sG "$BASE/quote" --data-urlencode "groupId=$GROUP" --data-urlencode "round=$ROUND"
+
+# pay ($0.02 USDC via x402): unpaid, this answers 402 with a PAYMENT-REQUIRED header
+curl -siG "$BASE/v1/verify-group" --data-urlencode "groupId=$GROUP" --data-urlencode "round=$ROUND"
+```
+
+Two paid endpoints paying one `payTo` make this a Composite entry: the receipt proves a single
+payment, the group proof proves the atomic bundle it settled in.
+
 ## Design
 
 - **No keys on the server.** `payTo` is a human-owned wallet. Verification and settlement are

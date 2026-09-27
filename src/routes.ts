@@ -1,15 +1,16 @@
 import type { Context, Hono } from "hono";
-import { buildReceipt, type Ok } from "./receipt.js";
+import { buildReceipt } from "./receipt.js";
+import { buildGroupProof, parseGroupQuery } from "./group.js";
 import type { ReceiptStore } from "./store.js";
 import type { AppEnv, Funnel } from "./funnel.js";
 import {
-  ROUTES, TXID_ERROR, TXID_RE, REPO_URL, networkName, buildAgentMd, buildDiscovery, buildLlmsTxt, buildOpenApi,
-  buildPricing, buildStatus, buildWellKnown, quoteFor, type ServiceConfig,
+  PAID_ROUTES, ROUTES, TXID_ERROR, TXID_RE, REPO_URL, networkName, paidCall, priceOf, buildAgentMd, buildDiscovery,
+  buildLlmsTxt, buildOpenApi, buildPricing, buildStatus, buildWellKnown, quoteFor, quoteForGroup, type ServiceConfig,
 } from "./meta.js";
 
 export type RouteDeps = {
   cfg: ServiceConfig;
-  store: ReceiptStore<Ok>;
+  store: ReceiptStore;
   funnel: Funnel;
   indexer: string;
   startedAtMs: number;
@@ -23,7 +24,9 @@ function handlers(d: RouteDeps): Record<string, Handler> {
     "/": (c) => c.json({
       service: "Fluent x402 receipt endpoint (Algorand)",
       network: networkName(cfg),
-      paid: { "GET /v1/receipt?txid=<txid>": { price: cfg.price, asset: `USDC ASA ${cfg.usdcAsa}`, payTo: cfg.payTo } },
+      paid: Object.fromEntries(PAID_ROUTES.map((r) => [
+        `${r.method} ${paidCall(r)}`, { price: priceOf(cfg, r), asset: `USDC ASA ${cfg.usdcAsa}`, payTo: cfg.payTo },
+      ])),
       free: ROUTES.filter((r) => r.free).map((r) => `${r.method} ${r.path}`),
       publicUrl: cfg.publicUrl || null,
       docs: REPO_URL,
@@ -31,7 +34,11 @@ function handlers(d: RouteDeps): Record<string, Handler> {
     "/health": (c) => c.json({ ok: true, ts: new Date().toISOString() }),
     "/discover": (c) => c.json(buildDiscovery(cfg)),
     "/quote": (c) => {
-      const q = quoteFor(cfg, c.req.query("txid") ?? "");
+      const groupId = c.req.query("groupId");
+      const round = c.req.query("round");
+      const q = groupId !== undefined || round !== undefined
+        ? quoteForGroup(cfg, groupId ?? "", round ?? "")
+        : quoteFor(cfg, c.req.query("txid") ?? "");
       return q.ok ? c.json(q.body) : c.json({ error: q.error }, q.status);
     },
     "/receipt/{hash}": (c) => {
@@ -48,6 +55,15 @@ function handlers(d: RouteDeps): Record<string, Handler> {
       const txid = c.req.query("txid") ?? "";
       if (!TXID_RE.test(txid)) return c.json({ error: TXID_ERROR }, 400);
       const r = await buildReceipt(d.indexer, txid, cfg.isMainnet);
+      if ("error" in r) return c.json({ error: r.error }, r.status);
+      d.store.put(r.hash, r);
+      c.set("receiptHash", r.hash);
+      return c.json(r);
+    },
+    "/v1/verify-group": async (c) => {
+      const q = parseGroupQuery(c.req.query("groupId") ?? "", c.req.query("round") ?? "");
+      if (!q.ok) return c.json({ error: q.error }, q.status);
+      const r = await buildGroupProof(d.indexer, q.groupId, q.round, cfg.isMainnet);
       if ("error" in r) return c.json({ error: r.error }, r.status);
       d.store.put(r.hash, r);
       c.set("receiptHash", r.hash);

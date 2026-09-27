@@ -31,6 +31,7 @@ const indexer = process.env.INDEXER_URL ?? (isMainnet
   ? "https://mainnet-idx.4160.nodely.dev"
   : "https://testnet-idx.4160.nodely.dev");
 const price = process.env.PRICE ?? "$0.01";
+const priceGroup = process.env.PRICE_GROUP ?? "$0.02";
 const port = Number(process.env.PORT ?? 4021);
 // Public origin. Railway terminates TLS, so the app sees http:// and would otherwise register the
 // Bazaar resource URL without https. Set PUBLIC_URL to the public origin in production.
@@ -75,7 +76,37 @@ const receiptDiscovery = declareDiscoveryExtension({
   },
 });
 
-const cfg: ServiceConfig = { payTo, network, usdcAsa, price, publicUrl, isMainnet };
+const groupDiscovery = declareDiscoveryExtension({
+  input: { groupId: "urRYpkY24txRUle6bI6X0ScMP5EJpuk2QJ+P5w46/E8=", round: 64000000 },
+  inputSchema: {
+    type: "object",
+    properties: {
+      groupId: { type: "string", description: "Atomic group id (standard base64 of 32 bytes; percent-encode it)" },
+      round: { type: "integer", description: "Confirmed round the group landed in" },
+    },
+    required: ["groupId", "round"],
+  },
+  output: {
+    example: {
+      proof: {
+        version: "fluent-group-proof/1",
+        network: isMainnet ? "algorand-mainnet" : "algorand-testnet",
+        groupId: "urRYpkY24txRUle6bI6X0ScMP5EJpuk2QJ+P5w46/E8=",
+        round: 64000000,
+        complete: true,
+        memberCount: 2,
+        members: [
+          { txid: "AAAA…", type: "axfer", sender: "PAYER…", receiver: "MERCHANT…", asset: "31566704", amount: "1990000", closeTo: null, rekeyTo: null, note: null },
+          { txid: "BBBB…", type: "pay", sender: "PAYER…", receiver: "MERCHANT…", asset: null, amount: "1000", closeTo: null, rekeyTo: null, note: null },
+        ],
+        indexerSource: "mainnet-idx.4160.nodely.dev",
+      },
+      hash: "sha256 of the canonical proof",
+    },
+  },
+});
+
+const cfg: ServiceConfig = { payTo, network, usdcAsa, price, priceGroup, publicUrl, isMainnet };
 const deps = { cfg, store: new ReceiptStore(), funnel: new Funnel(), indexer, startedAtMs: Date.now() };
 
 const app = new Hono<AppEnv>();
@@ -84,6 +115,7 @@ const app = new Hono<AppEnv>();
 mountFree(app, deps);
 
 app.use("/v1/receipt", funnel(deps.funnel));
+app.use("/v1/verify-group", funnel(deps.funnel));
 app.use(paymentMiddleware({
   "GET /v1/receipt": {
     ...(publicUrl ? { resource: `${publicUrl}/v1/receipt` } : {}),
@@ -93,6 +125,15 @@ app.use(paymentMiddleware({
     serviceName: "Fluent",
     tags: ["x402-global-challenge", "fluent", "receipt", "payments", "algorand"],
     extensions: receiptDiscovery,
+  },
+  "GET /v1/verify-group": {
+    ...(publicUrl ? { resource: `${publicUrl}/v1/verify-group` } : {}),
+    accepts: [{ scheme: "exact", price: priceGroup, network, payTo, extra: { asset: usdcAsa } }],
+    description: "Round-pinned Algorand atomic-group verification: proves membership of a group at a round and returns the canonical tuple with a sha256",
+    mimeType: "application/json",
+    serviceName: "Fluent",
+    tags: ["x402-global-challenge", "fluent", "receipt", "payments", "algorand", "group"],
+    extensions: groupDiscovery,
   },
 }, server));
 

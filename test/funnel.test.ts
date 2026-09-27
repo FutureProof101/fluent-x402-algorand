@@ -25,6 +25,17 @@ function appWith(f: Funnel) {
   return app;
 }
 
+test("a 402 on the group path increments issued402", async () => {
+  const lines: string[] = [];
+  const f = new Funnel((l) => lines.push(l));
+  const app = new Hono<AppEnv>();
+  app.use("/v1/verify-group", funnel(f));
+  app.use("/v1/verify-group", async (c) => c.json({}, 402));
+  await app.request("/v1/verify-group?groupId=x&round=1");
+  assert.equal(f.counters().issued402, 1);
+  assert.equal(JSON.parse(lines[0]).path, "/v1/verify-group");
+});
+
 test("header names come from @x402/core and match what @x402/hono reads", () => {
   assert.deepEqual(PAYMENT_SIGNATURE_HEADERS, ["payment-signature", "x-payment"]);
   assert.equal(PAYMENT_REQUIRED_HEADER, "payment-required");

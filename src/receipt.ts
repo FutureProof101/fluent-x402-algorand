@@ -28,6 +28,36 @@ const _allFields: Exclude<keyof Receipt, (typeof RECEIPT_FIELDS)[number]> extend
 void _allFields;
 
 export type Ok = { receipt: Receipt; hash: string };
+
+/** One transaction's value-transfer fields, as extracted from an indexer transaction object. Shared by
+ *  the receipt and the group proof so both read a leg the same way. */
+export type Leg = {
+  txid: string;
+  type: string;
+  sender: string;
+  receiver: string | null;
+  asset: string | null;
+  amount: string;
+  closeTo: string | null;
+  rekeyTo: string | null;
+  note: string | null;
+};
+
+export function legFromIndexerTx(t: Record<string, any>): Leg {
+  const ax = t["asset-transfer-transaction"];
+  const pay = t["payment-transaction"];
+  return {
+    txid: t.id,
+    type: t["tx-type"],
+    sender: t.sender,
+    receiver: ax ? ax.receiver : pay ? pay.receiver : null,
+    asset: ax ? String(ax["asset-id"]) : null,
+    amount: String(ax ? ax.amount : pay ? pay.amount : 0),
+    closeTo: ax?.["close-to"] ?? pay?.["close-remainder-to"] ?? null,
+    rekeyTo: t["rekey-to"] ?? null,
+    note: t.note ?? null,
+  };
+}
 type Err = { error: string; status: 404 | 502 };
 
 export async function buildReceipt(indexer: string, txid: string, mainnet: boolean): Promise<Ok | Err> {
@@ -43,23 +73,22 @@ export async function buildReceipt(indexer: string, txid: string, mainnet: boole
   const t = body.transaction;
   if (!t || !t["confirmed-round"]) return { error: "transaction not confirmed", status: 404 };
 
-  const ax = t["asset-transfer-transaction"];
-  const pay = t["payment-transaction"];
+  const leg = legFromIndexerTx(t);
   const receipt: Receipt = {
     version: "fluent-receipt/1",
     network: mainnet ? "algorand-mainnet" : "algorand-testnet",
-    txid: t.id,
-    type: t["tx-type"],
-    asset: ax ? String(ax["asset-id"]) : null,
-    amount: String(ax ? ax.amount : pay ? pay.amount : 0),
-    from: t.sender,
-    to: ax ? ax.receiver : pay ? pay.receiver : null,
-    closeTo: ax?.["close-to"] ?? pay?.["close-remainder-to"] ?? null,
-    rekeyTo: t["rekey-to"] ?? null,
+    txid: leg.txid,
+    type: leg.type,
+    asset: leg.asset,
+    amount: leg.amount,
+    from: leg.sender,
+    to: leg.receiver,
+    closeTo: leg.closeTo,
+    rekeyTo: leg.rekeyTo,
     round: t["confirmed-round"],
     roundTime: new Date(t["round-time"] * 1000).toISOString(),
     groupId: t.group ?? null,
-    note: t.note ?? null,
+    note: leg.note,
     indexerSource: new URL(indexer).host,
   };
   // Canonical: fixed key order as declared above, no whitespace.

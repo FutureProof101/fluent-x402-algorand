@@ -12,6 +12,7 @@ export const mainnetCfg: ServiceConfig = {
   network: `algorand:${ALGORAND_MAINNET_GENESIS_HASH}`,
   usdcAsa: USDC_MAINNET_ASA_ID,
   price: "$0.01",
+  priceGroup: "$0.02",
   publicUrl: "https://example.test",
   isMainnet: true,
 };

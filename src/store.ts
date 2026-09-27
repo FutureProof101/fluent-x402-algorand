@@ -1,11 +1,15 @@
 import type { Ok } from "./receipt.js";
+import type { GroupOk } from "./group.js";
 
 export const RECEIPT_STORE_CAP = 1000;
 
-// Receipts produced by the paid route, keyed by their sha256 hash, so a buyer can re-read one for
+/** Anything a paid route returns with a canonical hash: a receipt or a group proof. */
+export type Stored = Ok | GroupOk;
+
+// Results produced by the paid routes, keyed by their sha256 hash, so a buyer can re-read one for
 // free. Process-local by design: in-memory, bounded, lost on restart, not shared across replicas.
 // The hash is the canonical proof; this is a convenience cache, not a system of record.
-export class ReceiptStore<T = Ok> {
+export class ReceiptStore<T = Stored> {
   private readonly m = new Map<string, T>();
   constructor(readonly cap = RECEIPT_STORE_CAP) {}
 

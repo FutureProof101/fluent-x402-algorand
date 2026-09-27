@@ -1,12 +1,26 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { ReceiptStore, RECEIPT_STORE_CAP } from "../src/store.js";
+import type { GroupOk } from "../src/group.js";
 
 test("put/get round-trip", () => {
   const s = new ReceiptStore<{ n: number }>();
   s.put("a", { n: 1 });
   assert.deepEqual(s.get("a"), { n: 1 });
   assert.equal(s.size(), 1);
+});
+
+test("a group proof round-trips in the default store", () => {
+  const s = new ReceiptStore();
+  const g: GroupOk = {
+    proof: {
+      version: "fluent-group-proof/1", network: "algorand-mainnet", groupId: "g", round: 1, complete: true, memberCount: 0,
+      members: [], indexerSource: "x",
+    },
+    hash: "b".repeat(64),
+  };
+  s.put(g.hash, g);
+  assert.deepEqual(s.get(g.hash), g);
 });
 
 test("get of unknown is undefined", () => {
