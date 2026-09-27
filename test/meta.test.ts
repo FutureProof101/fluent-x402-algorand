@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   ROUTES, TXID_ERROR, SAMPLE_TXID, buildDiscovery, buildOpenApi, buildPricing, buildWellKnown, paidAccepts, quoteFor,
 } from "../src/meta.js";
@@ -84,9 +85,15 @@ test("openapi lists exactly the routes registered", () => {
 test("well-known accepts equals the middleware config's accepts", () => {
   const wk = buildWellKnown(cfg);
   assert.deepEqual(wk.resources[0].accepts, paidAccepts(cfg));
-  // paidAccepts is what src/index.ts hands paymentMiddleware; pin the shape it had inline at 7701278.
+  // src/index.ts hands paymentMiddleware an inline literal (kept exactly as at 7701278). Pin that line,
+  // then evaluate it with cfg's values so the literal and the derived free form cannot drift apart.
+  const PIN_LITERAL = '[{ scheme: "exact", price, network, payTo, extra: { asset: usdcAsa } }]';
+  const src = readFileSync(new URL("../src/index.ts", import.meta.url), "utf8");
+  const lines = src.split("\n").filter((l) => l.trimStart().startsWith("accepts:"));
+  assert.deepEqual(lines, [`    accepts: ${PIN_LITERAL},`]);
   const { price, network, payTo, usdcAsa } = cfg;
-  assert.deepEqual(paidAccepts(cfg), [{ scheme: "exact", price, network, payTo, extra: { asset: usdcAsa } }]);
+  const literal = new Function("price", "network", "payTo", "usdcAsa", `return ${PIN_LITERAL};`)(price, network, payTo, usdcAsa);
+  assert.deepEqual(paidAccepts(cfg), literal);
 });
 
 test("receipt re-read: unknown -> 404, paid result -> stored and re-readable", async () => {

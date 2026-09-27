@@ -21,7 +21,8 @@ export const TXID_RE = /^[A-Z2-7]{52}$/;
 export const TXID_ERROR = "txid must be a 52-char base32 Algorand transaction id";
 export const PAID_PATH = "/v1/receipt";
 
-/** The paid route's accepts[], used by paymentMiddleware and mirrored by /.well-known/x402. */
+/** The paid route's accepts[] derived from cfg for /.well-known/x402. src/index.ts keeps its own inline
+ *  literal; test/meta.test.ts checks the two stay equal. */
 export function paidAccepts(cfg: ServiceConfig) {
   return [{ scheme: "exact", price: cfg.price, network: cfg.network, payTo: cfg.payTo, extra: { asset: cfg.usdcAsa } }];
 }

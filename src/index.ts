@@ -12,7 +12,7 @@ import {
   USDC_MAINNET_ASA_ID,
   USDC_TESTNET_ASA_ID,
 } from "@x402/avm";
-import { paidAccepts, type ServiceConfig } from "./meta.js";
+import type { ServiceConfig } from "./meta.js";
 import { ReceiptStore } from "./store.js";
 import { Funnel, funnel, type AppEnv } from "./funnel.js";
 import { mountFree, mountPaid } from "./routes.js";
@@ -87,7 +87,7 @@ app.use("/v1/receipt", funnel(deps.funnel));
 app.use(paymentMiddleware({
   "GET /v1/receipt": {
     ...(publicUrl ? { resource: `${publicUrl}/v1/receipt` } : {}),
-    accepts: paidAccepts(cfg),
+    accepts: [{ scheme: "exact", price, network, payTo, extra: { asset: usdcAsa } }],
     description: "Verified Algorand payment receipt: fetches a confirmed transaction from the indexer, normalises it to the Fluent receipt shape, and returns it with a canonical hash. Built for agents that need proof-of-payment records.",
     mimeType: "application/json",
     serviceName: "Fluent",
